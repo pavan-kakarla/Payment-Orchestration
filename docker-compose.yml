@@ -1,0 +1,56 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    container_name: payments-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: payments_user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: payments
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments_user -d payments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: payments-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # optional: app service (uncomment to run app inside compose)
+  # app:
+  #   build: .
+  #   image: payment-orchestration:latest
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_USER: payments_user
+  #     DB_PASSWORD: pass
+  #     DB_NAME: payments
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   ports:
+  #     - "8080:8080"
+
+volumes:
+  postgres-data:
+  redis-data:
+
