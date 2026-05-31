@@ -93,7 +93,7 @@ docker exec -it $(docker ps -qf "name=postgres") psql -U payments_user -d paymen
 
 -- Useful queries:
 SELECT * FROM payments;
-SELECT * FROM provider_attempts ORDER BY created_at DESC;
+SELECT * FROM attempts ORDER BY created_at DESC;
 ```
 
 ### Inspect Redis (Idempotency Store)
