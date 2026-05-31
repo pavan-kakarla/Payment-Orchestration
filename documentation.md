@@ -143,3 +143,61 @@ Retrieves the detailed status and history of a specific payment transaction.
 *   **Behavior**:
     *   Retrieves the `Payment` entity and all associated `ProviderAttempt` records from the database.
     *   If the payment is not found, returns a `404 Not Found` response.
+
+## 3. Apache Camel Integration
+
+The Payment Orchestration Service leverages Apache Camel for robust routing, error handling, and integration with various payment processing logic.
+
+### 3.1. PaymentRoute (`PaymentRoute.java`)
+
+This is the core Camel route that orchestrates the payment processing flow.
+
+*   **Endpoint**: `direct:processPayment`
+*   **Purpose**: To receive a `PaymentRequest` and route it through the payment processing pipeline.
+*   **Error Handling**:
+    *   Configured with a `deadLetterChannel` to `direct:paymentFailure`.
+    *   Includes a retry mechanism: `maximumRedeliveries(3)` with a `redeliveryDelay(2000)` (2 seconds). This means if an unexpected exception occurs during processing, Camel will attempt to re-deliver the message up to 3 times before sending it to the `paymentFailure` endpoint.
+*   **Flow**:
+    1.  Receives a `PaymentRequest` from `direct:processPayment`.
+    2.  Invokes the `paymentProcessor` Spring bean's `process` method. The `PaymentProcessor` is expected to return a `PaymentResponse` object.
+    3.  Based on the `status` field of the returned `PaymentResponse`:
+        *   If `status` is "SUCCESS", the message is routed to `direct:paymentSuccess`.
+        *   Otherwise (e.g., `status` is "FAILED"), the message is routed to `direct:paymentFailure`.
+
+### 3.2. PaymentProcessor (`PaymentProcessor.java`)
+
+*   **Role**: A Spring `@Component` responsible for simulating the actual payment processing logic.
+*   **Behavior**:
+    *   Takes a `PaymentRequest` as input.
+    *   Simulates a payment transaction, returning a `PaymentResponse` with either "SUCCESS" or "FAILED" status.
+    *   Business-level failures (e.g., insufficient funds) are returned as a "FAILED" status in the `PaymentResponse`, allowing the Camel route to handle them gracefully.
+    *   Unexpected technical errors (e.g., network issues) would typically throw an exception, triggering Camel's retry mechanism defined in the `PaymentRoute`.
+
+### 3.3. PaymentSuccessHandler (`PaymentSuccessHandler.java`)
+
+*   **Role**: A Spring `@Component` that handles successful payment responses.
+*   **Endpoint**: `direct:paymentSuccess`
+*   **Behavior**:
+    *   Receives a `PaymentResponse` object.
+    *   Contains logic for post-success actions, such as:
+        *   Updating the payment status in the database.
+        *   Sending success notifications to the user or merchant.
+        *   Triggering downstream processes (e.g., order fulfillment).
+
+### 3.4. PaymentFailureHandler (`PaymentFailureHandler.java`)
+
+*   **Role**: A Spring `@Component` that handles failed payment responses.
+*   **Endpoint**: `direct:paymentFailure`
+*   **Behavior**:
+    *   Receives a `PaymentResponse` object (either due to a business failure from `PaymentProcessor` or after all retries for a technical failure).
+    *   Contains logic for handling payment failures, such as:
+        *   Logging the failure details.
+        *   Updating the payment status to "FAILED" in the database.
+        *   Triggering alerts for operational teams.
+        *   Initiating compensation or refund processes if necessary.
+
+### 3.5. How to Initiate a Payment via Camel
+
+To start a payment processing flow using the Camel route, you would typically inject a `ProducerTemplate` into your service or controller and send a `PaymentRequest` to the `direct:processPayment` endpoint. The response from the route will be the `PaymentResponse`.
+
+This structure provides a clear, maintainable, and extensible way to manage payment orchestration logic.
